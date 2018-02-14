@@ -1,4 +1,4 @@
-import gzip, pickle, numpy as np, time
+import gzip, pickle, numpy as np, time; from scipy.special import expit
 with gzip.open('mnist.pkl.gz','rb') as ff :
 	u = pickle._Unpickler( ff )
 	u.encoding = 'latin1'
@@ -26,19 +26,19 @@ class Network(object):
 			(9, np.matrix([0,0,0,0,0,0,0,0,0,1]))
 		])
 
-		self.learningRate = .5
+		self.learningRate = .1
 
 	def forward(self, x):
 		outputRaw = np.dot(x,self.weights)
 		return outputRaw
 
 	def calcErr(self, x, output, answer):
-
-		
+		#Sigmoid
+		sig = expit(output)
 		#Get the index of the max value
-		guess = np.argmax(output)
+		guess = np.argmax(sig)
 
-		#print("Guees: %d Answer: %d" %(guess,answer))
+		#print("Guess: %d Answer: %d" %(guess, answer))
 		#Calculate the 1x10 err vector
 		errVector = (self.numLookup[answer] - self.numLookup[guess]) * self.learningRate
 		x = np.matrix.transpose(x)
@@ -88,7 +88,7 @@ if __name__ == "__main__":
 			guess = np.argmax(estimate)
 
 			if(guess != test[1][k]):
-				numWrong[guess]+=1
+				numWrong[test[1][k]]+=1
 
 		print("\t",numWrong)
 		print("\t",(np.divide(numWrong,np.sum(numWrong)))*100)
