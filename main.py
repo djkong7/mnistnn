@@ -33,20 +33,27 @@ class Network(object):
 		return outputRaw
 
 	def calcErr(self, x, output, answer):
-		#Sigmoid
-		sig = expit(output)
 		#Get the index of the max value
-		guess = np.argmax(sig)
+		guess = np.argmax(output)
 
 		#print("Guess: %d Answer: %d" %(guess, answer))
 		#Calculate the 1x10 err vector
-		errVector = (self.numLookup[answer] - self.numLookup[guess]) * self.learningRate
+		errVector = (self.numLookup[answer] - self.numLookup[guess])
+		#Calulate the MSE
+		#(y-yhat)^2
+		sumErrSquared = np.dot(errVector,errVector)
+		#Take the mean
+		meanSquaredErr = sumErrSquared/errVector.shape[1]
+
+		#Compute Gradient
+		errVector *= -2
+		#Make raw data 785x1
 		x = np.matrix.transpose(x)
 		#Calculate 785x10 err matrix to add to weights matrix
 		errMatrix = np.dot(x,errVector)
 
 		#Implement error
-		self.weights+=errMatrix
+		self.weights-=errMatrix*self.learningRate
 
 
 if __name__ == "__main__":
@@ -54,7 +61,7 @@ if __name__ == "__main__":
 
 	#np.get_printoptions()
 
-	numEpoch = 3
+	numEpoch = 15
 
 	nn = Network()
 
