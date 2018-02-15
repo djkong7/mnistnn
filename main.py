@@ -7,10 +7,11 @@ with gzip.open('mnist.pkl.gz','rb') as ff :
 class Network(object):
 	def __init__(self):
 		#Constants
-		self.inputLayerSize = 785 #28*28+1for the bias
-		self.outputLayerSize = 10
+		self.INPUTLAYERSIZE = 785 #28*28+1for the bias
+		self.OUTPUTLAYERSIZE = 10
+		self.LEARNINGRATE = .00001
 		
-		self.weights = np.random.uniform(-1,1,size=(self.inputLayerSize,self.outputLayerSize))
+		self.weights = np.random.uniform(-1,1,size=(self.INPUTLAYERSIZE,self.OUTPUTLAYERSIZE))
 
 		#Map the numerical guess to an array where 1 is the guess
 		self.numLookup = dict([
@@ -26,65 +27,86 @@ class Network(object):
 			(9, np.matrix([0,0,0,0,0,0,0,0,0,1]))
 		])
 
-		self.learningRate = .1
-
 	def forward(self, x):
 		outputRaw = np.dot(x,self.weights)
 		return outputRaw
 
-	def calcErr(self, x, output, answer):
-		#Get the index of the max value
-		guess = np.argmax(output)
+	def calcErr(self, x, output, labels):
+		#Get the index of the max value of each row
+		guess = output.argmax(1)
 
-		#print("Guess: %d Answer: %d" %(guess, answer))
-		#Calculate the 1x10 err vector
-		errVector = (self.numLookup[answer] - self.numLookup[guess])
+		#print("Output:\n", output)
+		#print("Guess:\n", guess)
+		answers = self.labelsToMatrix(labels)
+		guesses = self.labelsToMatrix(guess)
+		
+		#Calculate the BATCHSIZEx10 err vector
+		errVector = (answers - guesses)#/BATCHSIZE
+		#print("Error Vector:\n", errVector)
 		#Calulate the MSE
 		#(y-yhat)^2
-		sumErrSquared = np.dot(errVector,errVector)
+		#sumErrSquared = np.dot(errVector,errVector)
 		#Take the mean
-		meanSquaredErr = sumErrSquared/errVector.shape[1]
+		#meanSquaredErr = sumErrSquared/errVector.shape[1]
 
 		#Compute Gradient
-		errVector *= -2
-		#Make raw data 785x1
+		errVector *= -1/5
+		#Make raw data 785xBATCHSIZE
 		x = np.matrix.transpose(x)
-		#Calculate 785x10 err matrix to add to weights matrix
-		errMatrix = np.dot(x,errVector)
+		#Calculate 785x10 update matrix to add to weights matrix
+		updateMatrix = np.dot(x,errVector)
 
-		#Implement error
-		self.weights-=errMatrix*self.learningRate
+		#Implement update
+		self.weights-=updateMatrix*(self.LEARNINGRATE/BATCHSIZE)
+
+	def labelsToMatrix(self, labels):
+		answers = self.numLookup[labels.item(0,0)]
+		for i in range(1,labels.shape[0]):
+			answers = np.concatenate((answers, self.numLookup[labels.item(0,0)]), axis=0)
+		#print("Label:\n",labels)
+		#print("Answers:\n",answers)
+		return answers
+
+
+def dataToMatrix(array):
+	#Append 1 for the bias calculations
+	#Force the data into a matrix
+	return np.mat(np.append(array, [1]))
+
 
 
 if __name__ == "__main__":
-	np.set_printoptions(linewidth=175)
-
+	BATCHSIZE = 100
+	np.set_printoptions(linewidth=175)#Print final numbers on one line
 	#np.get_printoptions()
 
 	numEpoch = 15
-
 	nn = Network()
 
 	for j in range(0,numEpoch):
 		print("Epoch number", j)
-		start = time.time()
-		for i in range(0,train[0].shape[0]):
-		#for i in range(0,10):
-			data = train[0][i]
-			data = np.append(data, [1])
-			data = np.mat(data)
-			#print(a.shape)
+		start = time.time()#Just for timing
+		for i in range(0,train[0].shape[0],BATCHSIZE):
+			#create matricies of training data
+			dataMatrix = dataToMatrix(train[0][i])#initialize the matrix to append to
+			labelMatrix = np.mat(train[1][i])#initialize the matrix to append to
+			for k in range(i+1,i+BATCHSIZE): 
+				#create a BATCHSIZEx785 matrix of training data
+				dataMatrix = np.concatenate((dataMatrix,dataToMatrix(train[0][k])), axis=0)
+				#create a BATCHSIZEx1 matrix of answers to the training data
+				labelMatrix = np.concatenate((labelMatrix, np.mat(train[1][k])), axis=0)
 			
-			estimate = nn.forward(data)
-			#print(estimate.shape, estimate)
+			#BATCHSIZE by 10 estimates
+			estimate = nn.forward(dataMatrix)
+			nn.calcErr(dataMatrix, estimate, labelMatrix)
+			#break
 
-			nn.calcErr(data, estimate, train[1][i])
 		end = time.time()
 		print("\tTime for Epoch:",end-start)
 
 		numWrong = np.array([0,0,0,0,0,0,0,0,0,0])
-		for k in range(0,test[0].shape[0]):
-			data = test[0][k]
+		for k in range(0,val[0].shape[0]):
+			data = val[0][k]
 			data = np.append(data, [1])
 			data = np.mat(data)
 			#print(a.shape)
@@ -94,10 +116,10 @@ if __name__ == "__main__":
 
 			guess = np.argmax(estimate)
 
-			if(guess != test[1][k]):
-				numWrong[test[1][k]]+=1
+			if(guess != val[1][k]):
+				numWrong[val[1][k]]+=1
 
-		print("\t",numWrong)
-		print("\t",(np.divide(numWrong,np.sum(numWrong)))*100)
-		print("\tPercent wrong:",(np.sum(numWrong)/test[0].shape[0])*100,"%")
+		#print("\t",numWrong)
+		#print("\t",(np.divide(numWrong,np.sum(numWrong)))*100)
+		print("\tPercent wrong:",(np.sum(numWrong)/val[0].shape[0])*100,"%")
 		
