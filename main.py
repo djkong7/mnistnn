@@ -9,117 +9,100 @@ class Network(object):
 		#Constants
 		self.INPUTLAYERSIZE = 785 #28*28+1for the bias
 		self.OUTPUTLAYERSIZE = 10
-		self.LEARNINGRATE = .00001
-		
 		self.weights = np.random.uniform(-1,1,size=(self.INPUTLAYERSIZE,self.OUTPUTLAYERSIZE))
 
-		#Map the numerical guess to an array where 1 is the guess
-		self.numLookup = dict([
-			(0, np.matrix([1,0,0,0,0,0,0,0,0,0])),
-			(1, np.matrix([0,1,0,0,0,0,0,0,0,0])),
-			(2, np.matrix([0,0,1,0,0,0,0,0,0,0])),
-			(3, np.matrix([0,0,0,1,0,0,0,0,0,0])),
-			(4, np.matrix([0,0,0,0,1,0,0,0,0,0])),
-			(5, np.matrix([0,0,0,0,0,1,0,0,0,0])),
-			(6, np.matrix([0,0,0,0,0,0,1,0,0,0])),
-			(7, np.matrix([0,0,0,0,0,0,0,1,0,0])),
-			(8, np.matrix([0,0,0,0,0,0,0,0,1,0])),
-			(9, np.matrix([0,0,0,0,0,0,0,0,0,1]))
-		])
+		#Hyperparameters to be tuned
+		self.LEARNINGRATE = .1
+		self.BATCHSIZE = 100
 
 	def forward(self, x):
-		outputRaw = np.dot(x,self.weights)
-		return outputRaw
+		return np.matmul(x,self.weights)
 
-	def calcErr(self, x, output, labels):
+	def calcYhat(self, raw):
 		#Get the index of the max value of each row
-		guess = output.argmax(1)
+		guessIndex = np.argmax(raw,axis=1)
+		#Encode the guesses and labels as 0's and 1
+		return self.oneHot(guessIndex)
 
-		#print("Output:\n", output)
-		#print("Guess:\n", guess)
-		answers = self.labelsToMatrix(labels)
-		guesses = self.labelsToMatrix(guess)
-		
-		#Calculate the BATCHSIZEx10 err vector
-		errVector = (answers - guesses)#/BATCHSIZE
-		#print("Error Vector:\n", errVector)
-		#Calulate the MSE
-		#(y-yhat)^2
-		#sumErrSquared = np.dot(errVector,errVector)
-		#Take the mean
-		#meanSquaredErr = sumErrSquared/errVector.shape[1]
+	def calcGradient(self, x, y, yhat):
+		#xT(y-yhat)/-5
+		return np.matmul(np.transpose(x),(y-yhat)/-5)
 
-		#Compute Gradient
-		errVector *= -1/5
-		#Make raw data 785xBATCHSIZE
-		x = np.matrix.transpose(x)
-		#Calculate 785x10 update matrix to add to weights matrix
-		updateMatrix = np.dot(x,errVector)
+	def updateWeights(self,gradient):
+		self.weights -= gradient
 
-		#Implement update
-		self.weights-=updateMatrix*(self.LEARNINGRATE/BATCHSIZE)
+	def oneHot(self,data):
+		#10000,
+		zeros = np.zeros((data.shape[0],self.OUTPUTLAYERSIZE))
+		#print(zeros.shape)
+		zeros[np.arange(data.shape[0]),data] = 1
+		return zeros
 
-	def labelsToMatrix(self, labels):
-		answers = self.numLookup[labels.item(0,0)]
-		for i in range(1,labels.shape[0]):
-			answers = np.concatenate((answers, self.numLookup[labels.item(0,0)]), axis=0)
-		#print("Label:\n",labels)
-		#print("Answers:\n",answers)
-		return answers
+	def accuracy(self, y, yhat):
+		correct = y == yhat
+		acc = np.mean(np.alltrue(correct, axis=1))
+		return acc
 
-
-def dataToMatrix(array):
-	#Append 1 for the bias calculations
-	#Force the data into a matrix
-	return np.mat(np.append(array, [1]))
+	def calcLoss(self, y, yhat):
+		sqrErr=(y-yhat)**2
+		meanSqrErr = np.mean(sqrErr)
+		return meanSqrErr
 
 
 
 if __name__ == "__main__":
-	BATCHSIZE = 100
 	np.set_printoptions(linewidth=175)#Print final numbers on one line
 	#np.get_printoptions()
 
-	numEpoch = 15
+	numEpoch = 10000
 	nn = Network()
+
+	#50000x785
+	#added the 1's onto the end
+	trainData = np.concatenate([train[0],np.ones((train[0].shape[0],1))],axis=1)
+	#50000x1
+	trainLabels = train[1]
+
+	validateData = np.concatenate([val[0],np.ones((val[0].shape[0],1))],axis=1)
+	validateLabels = val[1]
+
+	loss = np.Inf
 
 	for j in range(0,numEpoch):
 		print("Epoch number", j)
 		start = time.time()#Just for timing
-		for i in range(0,train[0].shape[0],BATCHSIZE):
-			#create matricies of training data
-			dataMatrix = dataToMatrix(train[0][i])#initialize the matrix to append to
-			labelMatrix = np.mat(train[1][i])#initialize the matrix to append to
-			for k in range(i+1,i+BATCHSIZE): 
-				#create a BATCHSIZEx785 matrix of training data
-				dataMatrix = np.concatenate((dataMatrix,dataToMatrix(train[0][k])), axis=0)
-				#create a BATCHSIZEx1 matrix of answers to the training data
-				labelMatrix = np.concatenate((labelMatrix, np.mat(train[1][k])), axis=0)
-			
-			#BATCHSIZE by 10 estimates
-			estimate = nn.forward(dataMatrix)
-			nn.calcErr(dataMatrix, estimate, labelMatrix)
-			#break
+		for i in range(0,trainData.shape[0],nn.BATCHSIZE):
+		#for i in range(0,0+nn.BATCHSIZE,nn.BATCHSIZE):
+			#create matricies of training data and labels
+			data = trainData[i:i+nn.BATCHSIZE]
+			labels = trainLabels[i:i+nn.BATCHSIZE]
+			#BATCHSIZEx10 estimates
+			rawOutput = nn.forward(data)
+			yhat = nn.calcYhat(rawOutput)
+			y = nn.oneHot(labels)
+			gradient = nn.calcGradient(data, y, yhat)
+			nn.updateWeights(gradient)
 
 		end = time.time()
 		print("\tTime for Epoch:",end-start)
 
-		numWrong = np.array([0,0,0,0,0,0,0,0,0,0])
-		for k in range(0,val[0].shape[0]):
-			data = val[0][k]
-			data = np.append(data, [1])
-			data = np.mat(data)
-			#print(a.shape)
-			
-			estimate = nn.forward(data)
-			#print(estimate.shape, estimate)
+		rawOutput = nn.forward(validateData)
+		yhat = nn.calcYhat(rawOutput)
+		y = nn.oneHot(validateLabels)
 
-			guess = np.argmax(estimate)
+		acc = nn.accuracy(y,yhat)*100
+		newLoss = nn.calcLoss(y,yhat)
+		print("\tAccuracy: %f"%(acc))
+		print("\tLoss: %f"%(newLoss))
+		if((newLoss-loss)<.003):
+			loss = newLoss
+		else:
+			break
 
-			if(guess != val[1][k]):
-				numWrong[val[1][k]]+=1
 
-		#print("\t",numWrong)
-		#print("\t",(np.divide(numWrong,np.sum(numWrong)))*100)
-		print("\tPercent wrong:",(np.sum(numWrong)/val[0].shape[0])*100,"%")
-		
+
+
+
+
+
+
