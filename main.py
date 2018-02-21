@@ -12,23 +12,33 @@ class Network(object):
 		self.weights = np.random.uniform(-1,1,size=(self.INPUTLAYERSIZE,self.OUTPUTLAYERSIZE))
 
 		#Hyperparameters to be tuned
-		self.LEARNINGRATE = .1
+		self.LEARNINGRATE = .05
 		self.BATCHSIZE = 100
 
 	def forward(self, x):
-		return np.matmul(x,self.weights)
+		z = np.matmul(x,self.weights)
+		return self.sigmoid(z)
 
-	def calcYhat(self, raw):
-		#Get the index of the max value of each row
-		guessIndex = np.argmax(raw,axis=1)
-		#Encode the guesses and labels as 0's and 1
-		return self.oneHot(guessIndex)
+	def sigmoid(self,x):
+		return expit(x)
 
-	def calcGradient(self, x, y, yhat):
-		#xT(y-yhat)/-5
-		return np.matmul(np.transpose(x),(y-yhat)/-5)
+	def calcYhat(self, output):
+		return self.oneHot(np.argmax(output, axis=1))
 
-	def updateWeights(self,gradient):
+	def calcGradient(self, x, y, output):
+		#(xT)DOT((y-output)/-5)*sig(z)*(1-sig(z))
+		#z=xW
+		z = np.matmul(x,self.weights)
+		a = self.sigmoid(z)
+		#sig(z)*(1-sig(z))
+		sigGrad = np.multiply(a,1-a)
+		#((y-output)/-5)*sig(z)*(1-sig(z))
+		outputGrad = np.multiply((y-output)/-5,sigGrad)
+		#(xT)DOT((y-output)/-5)*sig(z)*(1-sig(z))
+		gradient = np.matmul(np.transpose(x),outputGrad)
+		return gradient
+
+	def updateWeights(self, gradient):
 		self.weights -= gradient
 
 	def oneHot(self,data):
@@ -43,8 +53,8 @@ class Network(object):
 		acc = np.mean(np.alltrue(correct, axis=1))
 		return acc
 
-	def calcLoss(self, y, yhat):
-		sqrErr=(y-yhat)**2
+	def calcLoss(self, y, output):
+		sqrErr=(y-output)**2
 		meanSqrErr = np.mean(sqrErr)
 		return meanSqrErr
 
@@ -54,7 +64,7 @@ if __name__ == "__main__":
 	np.set_printoptions(linewidth=175)#Print final numbers on one line
 	#np.get_printoptions()
 
-	numEpoch = 10000
+	numEpoch = 1000
 	nn = Network()
 
 	#50000x785
@@ -67,6 +77,7 @@ if __name__ == "__main__":
 	validateLabels = val[1]
 
 	loss = np.Inf
+	error=[]
 
 	for j in range(0,numEpoch):
 		print("Epoch number", j)
@@ -77,24 +88,28 @@ if __name__ == "__main__":
 			data = trainData[i:i+nn.BATCHSIZE]
 			labels = trainLabels[i:i+nn.BATCHSIZE]
 			#BATCHSIZEx10 estimates
-			rawOutput = nn.forward(data)
-			yhat = nn.calcYhat(rawOutput)
+			#z=preactivation
+			output = nn.forward(data)
 			y = nn.oneHot(labels)
-			gradient = nn.calcGradient(data, y, yhat)
+			#Calc error for logging
+			#Append for a single write at the end
+			error.append(nn.calcLoss(y,output))
+
+			gradient = nn.calcGradient(data, y, output)
 			nn.updateWeights(gradient)
 
 		end = time.time()
 		print("\tTime for Epoch:",end-start)
 
-		rawOutput = nn.forward(validateData)
-		yhat = nn.calcYhat(rawOutput)
+		output = nn.forward(validateData)
+		yhat = nn.calcYhat(output)
 		y = nn.oneHot(validateLabels)
 
 		acc = nn.accuracy(y,yhat)*100
-		newLoss = nn.calcLoss(y,yhat)
+		newLoss = nn.calcLoss(y,output)
 		print("\tAccuracy: %f"%(acc))
 		print("\tLoss: %f"%(newLoss))
-		if((newLoss-loss)<.003):
+		if((newLoss-loss)<.002):
 			loss = newLoss
 		else:
 			break
