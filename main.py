@@ -1,6 +1,6 @@
 import gzip, pickle, numpy as np, time; from scipy.special import expit
 with gzip.open('mnist.pkl.gz','rb') as ff :
-	u = pickle._Unpickler( ff )
+	u = pickle._Unpickler(ff)
 	u.encoding = 'latin1'
 	train, val, test = u.load()
 
@@ -89,35 +89,28 @@ if __name__ == "__main__":
 			labels = trainLabels[i:i+nn.BATCHSIZE]
 			#BATCHSIZEx10 estimates
 			#z=preactivation
-			output = nn.forward(data)
+			a1 = nn.forward(data)
 			y = nn.oneHot(labels)
 			#Calc error for logging
 			#Append for a single write at the end
-			error.append(nn.calcLoss(y,output))
+			error.append(nn.calcLoss(y,a1))
 
-			gradient = nn.calcGradient(data, y, output)
+			gradient = nn.calcGradient(data, y, a1)
 			nn.updateWeights(gradient)
 
 		end = time.time()
 		print("\tTime for Epoch:",end-start)
 
-		output = nn.forward(validateData)
-		yhat = nn.calcYhat(output)
+		a1 = nn.forward(validateData)
+		yhat = nn.calcYhat(a1)
 		y = nn.oneHot(validateLabels)
 
 		acc = nn.accuracy(y,yhat)*100
-		newLoss = nn.calcLoss(y,output)
+		newLoss = nn.calcLoss(y,a1)
 		print("\tAccuracy: %f"%(acc))
 		print("\tLoss: %f"%(newLoss))
 		if((newLoss-loss)<.002):
 			loss = newLoss
 		else:
 			break
-
-
-
-
-
-
-
 

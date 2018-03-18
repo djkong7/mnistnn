@@ -1,0 +1,1 @@
+with open("train-images-idx3-ubyte.gz", r) as train_data, open()
