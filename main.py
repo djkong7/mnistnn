@@ -1,8 +1,4 @@
-import gzip, pickle, numpy as np, time; from scipy.special import expit
-with gzip.open('mnist.pkl.gz','rb') as ff :
-	u = pickle._Unpickler(ff)
-	u.encoding = 'latin1'
-	train, val, test = u.load()
+import numpy as np, time; from scipy.special import expit; import idx_parser as cparser
 
 class Network(object):
 	def __init__(self):
@@ -36,6 +32,7 @@ class Network(object):
 		outputGrad = np.multiply((y-output)/-5,sigGrad)
 		#(xT)DOT((y-output)/-5)*sig(z)*(1-sig(z))
 		gradient = np.matmul(np.transpose(x),outputGrad)
+		#print("\n",gradient,"\n")
 		return gradient
 
 	def updateWeights(self, gradient):
@@ -60,33 +57,49 @@ class Network(object):
 
 
 
-if __name__ == "__main__":
+def start():
 	np.set_printoptions(linewidth=175)#Print final numbers on one line
+	#np.set_printoptions(threshold=np.nan)#Print entire array
 	#np.get_printoptions()
 
-	numEpoch = 1000
+	num_epoch = 1000
 	nn = Network()
 
-	#50000x785
-	#added the 1's onto the end
-	trainData = np.concatenate([train[0],np.ones((train[0].shape[0],1))],axis=1)
-	#50000x1
-	trainLabels = train[1]
+	#Load the data
+	train_images = cparser.idx("data/mnist/train_images")
+	train_labels = cparser.idx("data/mnist/train_labels")
+	test_images = cparser.idx("data/mnist/test_images")
+	test_labels = cparser.idx("data/mnist/test_labels")
 
-	validateData = np.concatenate([val[0],np.ones((val[0].shape[0],1))],axis=1)
-	validateLabels = val[1]
+	#images come back as a 3d np array.
+	#reshpae the image data, normalize it(retypes to floats), and append 1's
+	shape = train_images.shape
+	train_images = (train_images.reshape(shape[0], 28*28))/255
+	train_images = np.concatenate([train_images,np.ones((shape[0],1))],axis=1)
+	print(train_images.dtype)
+	shape = test_images.shape
+	test_images = (test_images.reshape(shape[0], 28*28))/255
+	test_images = np.concatenate([test_images,np.ones((shape[0],1))],axis=1)
+	
+	#Create validation set
+	validate_images = train_images[50000:]
+	train_images = train_images[0:50000]
+	
+	validate_labels = train_labels[50000:]
+	train_labels = train_labels[0:50000]
+
 
 	loss = np.Inf
 	error=[]
 
-	for j in range(0,numEpoch):
+	for j in range(0,num_epoch):
 		print("Epoch number", j)
 		start = time.time()#Just for timing
-		for i in range(0,trainData.shape[0],nn.BATCHSIZE):
-		#for i in range(0,0+nn.BATCHSIZE,nn.BATCHSIZE):
+		for i in range(0,train_images.shape[0],nn.BATCHSIZE):
+		#for i in range(0,1,nn.BATCHSIZE):
 			#create matricies of training data and labels
-			data = trainData[i:i+nn.BATCHSIZE]
-			labels = trainLabels[i:i+nn.BATCHSIZE]
+			data = train_images[i:i+nn.BATCHSIZE]
+			labels = train_labels[i:i+nn.BATCHSIZE]
 			#BATCHSIZEx10 estimates
 			#z=preactivation
 			a1 = nn.forward(data)
@@ -101,9 +114,9 @@ if __name__ == "__main__":
 		end = time.time()
 		print("\tTime for Epoch:",end-start)
 
-		a1 = nn.forward(validateData)
+		a1 = nn.forward(validate_images)
 		yhat = nn.calcYhat(a1)
-		y = nn.oneHot(validateLabels)
+		y = nn.oneHot(validate_labels)
 
 		acc = nn.accuracy(y,yhat)*100
 		newLoss = nn.calcLoss(y,a1)
@@ -114,3 +127,6 @@ if __name__ == "__main__":
 		else:
 			break
 
+#I don't know how to run main in pdb so this is my solution
+if __name__ == "__main__":
+	start()
