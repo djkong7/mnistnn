@@ -95,6 +95,9 @@ def train(train_images, train_labels, validate_images, validate_labels, test_ima
 		newLoss = nn.calcLoss(y,a1)
 		print("\tAccuracy: %f"%(acc))
 		print("\tLoss: %f"%(newLoss))
+
+		#Attempt to automatically stop to prevent overtraining.
+		#Doesn't work at all
 		if((newLoss-loss)<.002):
 			loss = newLoss
 		else:
@@ -171,4 +174,5 @@ def initialize():
 #I don't know how to run main in pdb so this is my solution
 if __name__ == "__main__":
 	initialize()
-	train(*(load_data()))
+	datum = load_data()
+	train(*datum)
