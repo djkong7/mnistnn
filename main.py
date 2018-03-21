@@ -1,4 +1,4 @@
-import os, sys, time, numpy as np, idx_parser as cparser
+import pickle, gzip, os, sys, time, numpy as np, idx_parser as cparser
 from scipy.special import expit
 
 class Network(object):
@@ -34,7 +34,7 @@ class Network(object):
 		#(xT)DOT((y-output)/-5)*sig(z)*(1-sig(z))
 		gradient = np.matmul(np.transpose(x),outputGrad)
 		#print("\n",gradient,"\n")
-		return gradient
+		return gradient*self.LEARNINGRATE
 
 	def updateWeights(self, gradient):
 		self.weights -= gradient
@@ -58,12 +58,17 @@ class Network(object):
 
 
 
-def train(train_images, train_labels, validate_images, validate_labels, test_images, test_labels, wmu_test_images, wmu_test_labels):
+def train(nn, train_images, train_labels, validate_images, validate_labels):
 	num_epoch = 1000
-	nn = Network()
-
+	stop = False
+ 
 	loss = np.Inf
-	error=[]
+	counter = 0
+	loss_increase = 0
+
+	error = []
+	accuracy = []
+	losses = []
 
 	for j in range(0,num_epoch):
 		print("Epoch number", j)
@@ -84,95 +89,158 @@ def train(train_images, train_labels, validate_images, validate_labels, test_ima
 			gradient = nn.calcGradient(data, y, a1)
 			nn.updateWeights(gradient)
 
+			counter += 1
+
+			if (counter % 150) == 0:
+				a1 = nn.forward(validate_images)
+				yhat = nn.calcYhat(a1)
+				y = nn.oneHot(validate_labels)
+
+				acc = nn.accuracy(y,yhat)*100
+				newLoss = nn.calcLoss(y,a1)
+				accuracy.append(acc)
+				losses.append(newLoss)
+				print("\tAccuracy: %f"%(acc))
+				#print("\tLoss: %f"%(newLoss))
+
+				#Automatically stop to prevent overtraining.
+				if (newLoss - loss) <= 0:
+					loss = newLoss
+					loss_increase = 0
+					save_weights = nn.weights
+				else:
+					loss_increase += 1
+					if loss_increase >= 8:
+						#Stop epoch loop
+						stop = True
+						#Stop batchsize loop
+						break
+
 		end = time.time()
 		print("\tTime for Epoch:",end-start)
-
-		a1 = nn.forward(validate_images)
-		yhat = nn.calcYhat(a1)
-		y = nn.oneHot(validate_labels)
-
-		acc = nn.accuracy(y,yhat)*100
-		newLoss = nn.calcLoss(y,a1)
-		print("\tAccuracy: %f"%(acc))
-		print("\tLoss: %f"%(newLoss))
-
-		#Attempt to automatically stop to prevent overtraining.
-		#Doesn't work at all
-		if((newLoss-loss)<.002):
-			loss = newLoss
-		else:
+		if stop:
+			nn.weights = save_weights
 			break
 
-def load_data():
-	try:
-		#Numpy files are much faster to load than the mnist data
-		#Try to load these first
-		train_images = np.load("data/nmpy/train_images.npy")
-		train_labels = np.load("data/nmpy/train_labels.npy")
-		test_images = np.load("data/nmpy/test_images.npy")
-		test_labels = np.load("data/nmpy/test_labels.npy")
-		wmu_test_images = np.load("data/nmpy/wmu_test_images.npy")
-		wmu_test_labels = np.load("data/nmpy/wmu_test_labels.npy")
+def test(nn, test_images, test_labels, wmu_test_images, wmu_test_labels):
+	a1 = nn.forward(test_images)
+	yhat = nn.calcYhat(a1)
+	y = nn.oneHot(test_labels)
 
-	except IOError as e1:
-		print(e1)
-		print("Numpy hasn't been written. Trying idx...")
+	acc = nn.accuracy(y,yhat)*100
+	newLoss = nn.calcLoss(y,a1)
+	print("MNIST")
+	print("\tAccuracy: %f"%(acc))
+	print("\tLoss: %f"%(newLoss))
 
+	a1 = nn.forward(wmu_test_images)
+	yhat = nn.calcYhat(a1)
+	y = nn.oneHot(wmu_test_labels)
+
+	acc = nn.accuracy(y,yhat)*100
+	newLoss = nn.calcLoss(y,a1)
+	print("WMU")
+	print("\tAccuracy: %f"%(acc))
+	print("\tLoss: %f"%(newLoss))
+
+def load_data(pickled):
+	if(pickled):
+		with gzip.open('data/mnist.pkl.gz','rb') as ff :
+			u = pickle._Unpickler(ff)
+			u.encoding = 'latin1'
+			train, val, test = u.load()
+
+		train_images = train[0]
+		train_labels = train[1]
+		test_images = test[0]
+		test_labels = test[1]
+		validate_images = val[0]
+		validate_labels = val[1]
+
+		shape = train_images.shape
+		train_images = np.concatenate([train_images,np.ones((shape[0],1))],axis=1)
+		shape = test_images.shape
+		test_images = np.concatenate([test_images,np.ones((shape[0],1))],axis=1)
+		shape = validate_images.shape
+		validate_images = np.concatenate([validate_images,np.ones((shape[0],1))],axis=1)
+
+		return train_images, train_labels, validate_images, validate_labels, test_images, test_labels
+	else:
 		try:
-			#Load the data from mnist
-			train_images = cparser.idx("data/mnist/train_images")
-			train_labels = cparser.idx("data/mnist/train_labels")
-			test_images = cparser.idx("data/mnist/test_images")
-			test_labels = cparser.idx("data/mnist/test_labels")
-			wmu_test_images = cparser.idx("data/wmu/wmu_test_images")
-			wmu_test_labels = cparser.idx("data/wmu/wmu_test_labels")
+			#Numpy files are much faster to load than the mnist data
+			#Try to load these first
+			train_images = np.load("data/nmpy/train_images.npy")
+			train_labels = np.load("data/nmpy/train_labels.npy")
+			test_images = np.load("data/nmpy/test_images.npy")
+			test_labels = np.load("data/nmpy/test_labels.npy")
+			wmu_test_images = np.load("data/nmpy/wmu_test_images.npy")
+			wmu_test_labels = np.load("data/nmpy/wmu_test_labels.npy")
 
-			#images come back as a 3d np array.
-			#reshpae the image data, normalize it(retypes to floats), and append 1's
-			shape = train_images.shape
-			train_images = (train_images.reshape(shape[0], 28*28))/255
-			train_images = np.concatenate([train_images,np.ones((shape[0],1))],axis=1)
-			
-			shape = test_images.shape
-			test_images = (test_images.reshape(shape[0], 28*28))/255
-			test_images = np.concatenate([test_images,np.ones((shape[0],1))],axis=1)
+		except IOError as e1:
+			print(e1)
+			print("Numpy hasn't been written. Trying idx...")
 
-			#Make the mnpy directory if it doesn't exist.
-			if not os.path.exists("data/nmpy"):
-				os.makedirs("data/nmpy")
+			try:
+				#Load the data from mnist
+				train_images = cparser.idx("data/mnist/train_images")
+				train_labels = cparser.idx("data/mnist/train_labels")
+				test_images = cparser.idx("data/mnist/test_images")
+				test_labels = cparser.idx("data/mnist/test_labels")
+				wmu_test_images = cparser.idx("data/wmu/wmu_test_images")
+				wmu_test_labels = cparser.idx("data/wmu/wmu_test_labels")
 
-			np.save("data/nmpy/train_images", train_images)
-			np.save("data/nmpy/train_labels", train_labels)
-			np.save("data/nmpy/test_images", test_images)
-			np.save("data/nmpy/test_labels", test_labels)
-			np.save("data/nmpy/wmu_test_images", wmu_test_images)
-			np.save("data/nmpy/wmu_test_labels", wmu_test_labels)
+				#images come back as a 3d np array.
+				#reshpae the image data, normalize it(retypes to floats), and append 1's
+				shape = train_images.shape
+				train_images = (train_images.reshape(shape[0], 28*28))/255
+				train_images = np.concatenate([train_images,np.ones((shape[0],1))],axis=1)
+				
+				shape = test_images.shape
+				test_images = (test_images.reshape(shape[0], 28*28))/255
+				test_images = np.concatenate([test_images,np.ones((shape[0],1))],axis=1)
 
-		except IOError as e2:
-			print("Couldn't find file.", e2)
-			print("Exiting...")
-			sys.exit(1)
+				shape = wmu_test_images.shape
+				wmu_test_images = (wmu_test_images.reshape(shape[0], 28*28))/255
+				wmu_test_images = np.concatenate([wmu_test_images,np.ones((shape[0],1))],axis=1)
+
+				#Make the mnpy directory if it doesn't exist.
+				if not os.path.exists("data/nmpy"):
+					os.makedirs("data/nmpy")
+
+				np.save("data/nmpy/train_images", train_images)
+				np.save("data/nmpy/train_labels", train_labels)
+				np.save("data/nmpy/test_images", test_images)
+				np.save("data/nmpy/test_labels", test_labels)
+				np.save("data/nmpy/wmu_test_images", wmu_test_images)
+				np.save("data/nmpy/wmu_test_labels", wmu_test_labels)
+
+			except IOError as e2:
+				print("Couldn't find file.", e2)
+				print("Exiting...")
+				sys.exit(1)
+		
+		#Create validation set
+		validate_images = train_images[50000:]
+		train_images = train_images[0:50000]
+		
+		validate_labels = train_labels[50000:]
+		train_labels = train_labels[0:50000]
+
+		return train_images, train_labels, validate_images, validate_labels, test_images, test_labels, wmu_test_images, wmu_test_labels
 	
-	#Create validation set
-	validate_images = train_images[50000:]
-	train_images = train_images[0:50000]
-	
-	validate_labels = train_labels[50000:]
-	train_labels = train_labels[0:50000]
 
-	return train_images, train_labels, validate_images, validate_labels, test_images, test_labels, wmu_test_images, wmu_test_labels
-
-
-
-
-def initialize():
+if __name__ == "__main__":
 	np.set_printoptions(linewidth=175)#Print final numbers on one line
 	#np.set_printoptions(threshold=np.nan)#Print entire array
 	#np.get_printoptions()
+	
+	nn = Network()
 
-
-#I don't know how to run main in pdb so this is my solution
-if __name__ == "__main__":
-	initialize()
-	datum = load_data()
-	train(*datum)
+	pickled = 0
+	
+	if pickled:
+		train_images, train_labels, validate_images, validate_labels, test_images, test_labels = load_data(pickled)
+	else:
+		train_images, train_labels, validate_images, validate_labels, test_images, test_labels, wmu_test_images, wmu_test_labels = load_data(pickled)
+	train(nn, train_images, train_labels, validate_images, validate_labels)
+	test(nn, test_images, test_labels, wmu_test_images, wmu_test_labels)
