@@ -15,6 +15,6 @@ trainloader = torch.utils.data.DataLoader(trainset, batch_size=100)
 testset = torchvision.datasets.MNIST(root='./data', train=False,download=True, transform=transform)
 testloader = torch.utils.data.DataLoader(testset, batch_size=100)
 
-print(type(trainset))
+print(trainset[0])
 
 print("Done")

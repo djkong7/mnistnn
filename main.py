@@ -5,20 +5,23 @@ LEARNING_RATE = .001
 INPUT_SIZE = 784
 NUM_CLASSES = 10
 HIDDEN_LAYER_SIZE = 200
-
+BATCHSIZE = 100
 class Net(pt.nn.Module):
-    def __init__(self, INPUT_SIZE, NUM_CLASSES):
+    def __init__(self):
         super(Net, self).__init__()
         self.input = pt.nn.Linear(INPUT_SIZE, HIDDEN_LAYER_SIZE)
         self.hidden1 = pt.nn.Linear(HIDDEN_LAYER_SIZE, HIDDEN_LAYER_SIZE)
+
         self.ouput = pt.nn.Linear(HIDDEN_LAYER_SIZE, NUM_CLASSES)
         
     def forward(self, x):
-        x = 
-        
+        x = pt.nn.functional.relu(self.input(x))
+        x = pt.nn.functional.relu(self.hidden1(x))
+        x = self.ouput(x)
+        return x
         
 
-def train(nn, train_images, train_labels, validate_images, validate_labels):
+def train(net, train_images, train_labels, validate_images, validate_labels):
     num_epoch = 1000
     stop = False
  
@@ -26,61 +29,42 @@ def train(nn, train_images, train_labels, validate_images, validate_labels):
     counter = 0
     loss_increase = 0
 
-    error = []
-    accuracy = []
-    losses = []
-
     #For calculating loss
     criterion = pt.nn.modules.loss.CrossEntropyLoss()
-    optimizer = pt.opim.SGD(net.parameters(), lr=LEARNING_RATE)
+    optimizer = pt.optim.SGD(net.parameters(), lr=LEARNING_RATE)
     
     for j in range(0,num_epoch):
         print("Epoch number", j)
         start = time.time()#Just for timing
-        for i in range(0,train_images.shape[0],nn.BATCHSIZE):
+        for i in range(0,train_images.shape[0], BATCHSIZE):
         #for i in range(0,1,nn.BATCHSIZE):
             #create matricies of training data and labels
-            data = train_images[i:i+nn.BATCHSIZE]
-            labels = train_labels[i:i+nn.BATCHSIZE]
+            data = train_images[i:i+BATCHSIZE]
+            labels = train_labels[i:i+BATCHSIZE]
 
             # wrap them in Variable
             (data, labels) = pt.autograd.Variable(data), pt.autograd.Variable(labels)
             
             #zero the parameter gradients
             optimizer.zero_grad()
-            
-            #BATCHSIZEx10 estimates
-            #z=preactivation
-            a1 = nn.forward(data)
-            y = nn.oneHot(labels)
-            #Calc error for logging
-            #Append for a single write at the end
-            error.append(nn.calcLoss(y,a1))
-
-            gradient = nn.calcGradient(data, y, a1)
-            nn.updateWeights(gradient)
+            y = net(data)
+            new_loss = criterion(y,labels)
+            new_loss.backward()
+            optimizer.step()
 
             counter += 1
 
             if (counter % 150) == 0:
-                a1 = nn.forward(validate_images)
-                yhat = nn.calcYhat(a1)
-                y = nn.oneHot(validate_labels)
-
-                acc = nn.accuracy(y,yhat)*100
-                newLoss = nn.calcLoss(y,a1)
-                accuracy.append(acc)
-                losses.append(newLoss)
 
                 #Automatically stop to prevent overtraining.
-                if (newLoss - loss) <= 0:
-                    loss = newLoss
+                if (new_loss.data[0] - loss) <= 0:
+                    loss = new_loss.data[0]
                     loss_increase = 0
-                    save_weights = nn.weights
-                    #print("\tAccuracy: %f"%(acc))
-                    #print("\tLoss: %f"%(newLoss))
+                    pt.save(net.state_dict(),"model_save/model")
+                    #print("\tLoss: %f"%(new_loss.data[0]))
                 else:
                     loss_increase += 1
+                    #print(loss_increase)
                     if loss_increase >= 8:
                         #Stop epoch loop
                         stop = True
@@ -88,31 +72,26 @@ def train(nn, train_images, train_labels, validate_images, validate_labels):
                         break
 
         end = time.time()
-        print("\tTime for Epoch:",end-start)
+        #print("\tTime for Epoch:",end-start)
         if stop:
-            nn.weights = save_weights
             break
 
-def test(nn, test_images, test_labels, wmu_test_images, wmu_test_labels):
-    a1 = nn.forward(test_images)
-    yhat = nn.calcYhat(a1)
-    y = nn.oneHot(test_labels)
-
-    acc = nn.accuracy(y,yhat)*100
-    newLoss = nn.calcLoss(y,a1)
+def test(net, test_images, test_labels, wmu_test_images, wmu_test_labels):
+    test_images = pt.autograd.Variable(test_images)
+    y = net(test_images)
+    _, predicted = pt.max(y.data,1)
+    correct = (predicted == test_labels).sum()
+    
     print("MNIST")
-    print("\tAccuracy: %f"%(acc))
-    print("\tLoss: %f"%(newLoss))
-
-    a1 = nn.forward(wmu_test_images)
-    yhat = nn.calcYhat(a1)
-    y = nn.oneHot(wmu_test_labels)
-
-    acc = nn.accuracy(y,yhat)*100
-    newLoss = nn.calcLoss(y,a1)
+    print("\tAccuracy: %f"%(correct/test_labels.shape[0]*100))
+    
+    wmu_test_images = pt.autograd.Variable(wmu_test_images)
+    y = net(wmu_test_images)
+    _, predicted = pt.max(y.data,1)
+    correct = (predicted == wmu_test_labels).sum()
+    
     print("WMU")
-    print("\tAccuracy: %f"%(acc))
-    print("\tLoss: %f"%(newLoss))
+    print("\tAccuracy: %f"%(correct/wmu_test_labels.shape[0]*100))
 
 def load_data():
     try:
@@ -150,12 +129,12 @@ def load_data():
             shape = np_wmu_test_images.shape
             np_wmu_test_images = (np_wmu_test_images.reshape(shape[0], 28*28))/255
 
-            train_images = pt.from_numpy(np_train_images)
-            train_labels = pt.from_numpy(np_train_labels)
-            test_images = pt.from_numpy(np_test_images)
-            test_labels = pt.from_numpy(np_test_labels)
-            wmu_test_images = pt.from_numpy(np_wmu_test_images)
-            wmu_test_labels = pt.from_numpy(np_wmu_test_labels)
+            train_images = pt.from_numpy(np_train_images).float()
+            train_labels = pt.from_numpy(np_train_labels).long()
+            test_images = pt.from_numpy(np_test_images).float()
+            test_labels = pt.from_numpy(np_test_labels).long()
+            wmu_test_images = pt.from_numpy(np_wmu_test_images).float()
+            wmu_test_labels = pt.from_numpy(np_wmu_test_labels).long()
 
             #Make the mnpy directory if it doesn't exist.
             if not os.path.exists("data/pytorch"):
@@ -185,22 +164,30 @@ def load_data():
 
 if __name__ == "__main__":
     
+    net = Net()
     
     train_images, train_labels, validate_images, validate_labels, test_images, test_labels, wmu_test_images, wmu_test_labels = load_data()
     
     if pt.cuda.is_available():
-       train_images = train_images.cuda()
-       train_labels = train_labels.cuda()
-       test_images = test_images.cuda()
-       test_labels = test_labels.cuda()
-       wmu_test_images = wmu_test_images.cuda()
-       wmu_test_labels = wmu_test_labels.cuda()
+        print("On Cuda")
+        net.cuda()
+        train_images = train_images.cuda()
+        train_labels = train_labels.cuda()
+        test_images = test_images.cuda()
+        test_labels = test_labels.cuda()
+        wmu_test_images = wmu_test_images.cuda()
+        wmu_test_labels = wmu_test_labels.cuda()
 
     train_start = time.time()
-    train(train_images, train_labels, validate_images, validate_labels)
+    train(net, train_images, train_labels, validate_images, validate_labels)
     train_end = time.time()
     print("Total time to train:", train_end-train_start)
-    test(test_images, test_labels, wmu_test_images, wmu_test_labels)
+    
+    net.load_state_dict(pt.load("model_save/model"))
+    if pt.cuda.is_available():
+        net.cuda()
+    
+    test(net, test_images, test_labels, wmu_test_images, wmu_test_labels)
 
 
 
