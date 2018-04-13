@@ -2,22 +2,29 @@ from __future__ import print_function
 import os, sys, time, torch as pt, numpy as np, idx_parser as cparser
 
 LEARNING_RATE = .001
-INPUT_SIZE = 784
+INPUT_SIZE = 16*7*7
 NUM_CLASSES = 10
-HIDDEN_LAYER_SIZE = 200
 BATCHSIZE = 100
+HIDDEN_LAYER_SIZE = 200
+OUTPUT_SIZE = 10
+
 class Net(pt.nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.input = pt.nn.Linear(INPUT_SIZE, HIDDEN_LAYER_SIZE)
-        self.hidden1 = pt.nn.Linear(HIDDEN_LAYER_SIZE, HIDDEN_LAYER_SIZE)
-
-        self.ouput = pt.nn.Linear(HIDDEN_LAYER_SIZE, NUM_CLASSES)
+        #ouput size = (input_dims-kernel_size)/stride + 1        (30-3)/1+1 = 28
+        self.conv1 = pt.nn.Conv2d(in_channels = 1, out_channels = 8, kernel_size = 3, padding = 1)
+        self.pool = pt.nn.MaxPool2d(kernel_size = 2)
+        self.conv2 = pt.nn.Conv2d(in_channels = 8, out_channels = 16, kernel_size = 3, padding = 1)
+        self.fc1 = pt.nn.Linear(INPUT_SIZE,HIDDEN_LAYER_SIZE)
+        self.fc2 = pt.nn.Linear(HIDDEN_LAYER_SIZE, OUTPUT_SIZE)
         
     def forward(self, x):
-        x = pt.nn.functional.relu(self.input(x))
-        x = pt.nn.functional.relu(self.hidden1(x))
-        x = self.ouput(x)
+        x = self.pool(pt.nn.functional.relu(self.conv1(x)))
+        x = self.pool(pt.nn.functional.relu(self.conv2(x)))
+        #print(x)
+        x = x.view(-1, 16 * 7 * 7)
+        x = pt.nn.functional.relu(self.fc1(x))
+        x = self.fc2(x)
         return x
         
 
@@ -31,7 +38,7 @@ def train(net, train_images, train_labels, validate_images, validate_labels):
 
     #For calculating loss
     criterion = pt.nn.modules.loss.CrossEntropyLoss()
-    optimizer = pt.optim.SGD(net.parameters(), lr=LEARNING_RATE)
+    optimizer = pt.optim.SGD(net.parameters(), lr = LEARNING_RATE, momentum = 0.9)
     
     for j in range(0,num_epoch):
         print("Epoch number", j)
@@ -119,21 +126,16 @@ def load_data():
             np_wmu_test_labels = cparser.idx("data/wmu/wmu_test_labels.idx")
 
             #images come back as a 3d np array.
-            #reshpae the image data, normalize it(retypes to floats), and append 1's for bias
-            shape = np_train_images.shape
-            np_train_images = (np_train_images.reshape(shape[0], 28*28))/255
-            
-            shape = np_test_images.shape
-            np_test_images = (np_test_images.reshape(shape[0], 28*28))/255
+            #normalize it
+            np_train_images = np_train_images / 255
+            np_test_images = np_test_images / 255
+            np_wmu_test_images = np_wmu_test_images / 255
 
-            shape = np_wmu_test_images.shape
-            np_wmu_test_images = (np_wmu_test_images.reshape(shape[0], 28*28))/255
-
-            train_images = pt.from_numpy(np_train_images).float()
+            train_images = pt.from_numpy(np_train_images).float().unsqueeze(1)
             train_labels = pt.from_numpy(np_train_labels).long()
-            test_images = pt.from_numpy(np_test_images).float()
+            test_images = pt.from_numpy(np_test_images).float().unsqueeze(1)
             test_labels = pt.from_numpy(np_test_labels).long()
-            wmu_test_images = pt.from_numpy(np_wmu_test_images).float()
+            wmu_test_images = pt.from_numpy(np_wmu_test_images).float().unsqueeze(1)
             wmu_test_labels = pt.from_numpy(np_wmu_test_labels).long()
 
             #Make the mnpy directory if it doesn't exist.
@@ -167,6 +169,7 @@ if __name__ == "__main__":
     net = Net()
     
     train_images, train_labels, validate_images, validate_labels, test_images, test_labels, wmu_test_images, wmu_test_labels = load_data()
+    
     
     if pt.cuda.is_available():
         print("On Cuda")
