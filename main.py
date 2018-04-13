@@ -2,7 +2,7 @@ from __future__ import print_function
 import os, sys, time, torch as pt, numpy as np, idx_parser as cparser
 
 LEARNING_RATE = .001
-INPUT_SIZE = 16*7*7
+INPUT_SIZE = 16*5*5
 NUM_CLASSES = 10
 BATCHSIZE = 100
 HIDDEN_LAYER_SIZE = 200
@@ -12,19 +12,21 @@ class Net(pt.nn.Module):
     def __init__(self):
         super(Net, self).__init__()
         #ouput size = (input_dims-kernel_size)/stride + 1        (30-3)/1+1 = 28
-        self.conv1 = pt.nn.Conv2d(in_channels = 1, out_channels = 8, kernel_size = 3, padding = 1)
+        self.conv1 = pt.nn.Conv2d(in_channels = 1, out_channels = 6, kernel_size = 5, padding = 2)
         self.pool = pt.nn.MaxPool2d(kernel_size = 2)
-        self.conv2 = pt.nn.Conv2d(in_channels = 8, out_channels = 16, kernel_size = 3, padding = 1)
-        self.fc1 = pt.nn.Linear(INPUT_SIZE,HIDDEN_LAYER_SIZE)
-        self.fc2 = pt.nn.Linear(HIDDEN_LAYER_SIZE, OUTPUT_SIZE)
+        self.conv2 = pt.nn.Conv2d(in_channels = 6, out_channels = 16, kernel_size = 5, padding = 0)
+        self.fc1 = pt.nn.Linear(INPUT_SIZE,120)
+        self.fc2 = pt.nn.Linear(120,84)
+        self.fc3 = pt.nn.Linear(84,10)
         
     def forward(self, x):
         x = self.pool(pt.nn.functional.relu(self.conv1(x)))
         x = self.pool(pt.nn.functional.relu(self.conv2(x)))
         #print(x)
-        x = x.view(-1, 16 * 7 * 7)
+        x = x.view(-1, INPUT_SIZE)
         x = pt.nn.functional.relu(self.fc1(x))
-        x = self.fc2(x)
+        x = pt.nn.functional.relu(self.fc2(x))
+        x = self.fc3(x)
         return x
         
 
