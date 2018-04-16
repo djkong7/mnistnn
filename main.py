@@ -70,6 +70,7 @@ def train(net, train_images, train_labels, validate_images, validate_labels):
                     loss = new_loss.data[0]
                     loss_increase = 0
                     pt.save(net.state_dict(),"model_save/model")
+                    #print("Saved!")
                     #print("\tLoss: %f"%(new_loss.data[0]))
                 else:
                     loss_increase += 1
