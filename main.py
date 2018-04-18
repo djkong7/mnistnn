@@ -11,7 +11,7 @@ OUTPUT_SIZE = 10
 class Net(pt.nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        #ouput size = (input_dims-kernel_size)/stride + 1        (30-3)/1+1 = 28
+        #ouput size = (input_dims-kernel_size)/stride + 1        (32-5)/1+1 = 28
         self.conv1 = pt.nn.Conv2d(in_channels = 1, out_channels = 6, kernel_size = 5, padding = 2)
         self.pool = pt.nn.MaxPool2d(kernel_size = 2)
         self.conv2 = pt.nn.Conv2d(in_channels = 6, out_channels = 16, kernel_size = 5, padding = 0)
@@ -20,8 +20,8 @@ class Net(pt.nn.Module):
         self.fc3 = pt.nn.Linear(84,10)
         
     def forward(self, x):
-        x = self.pool(pt.nn.functional.relu(self.conv1(x)))
-        x = self.pool(pt.nn.functional.relu(self.conv2(x)))
+        x = self.pool(pt.nn.functional.relu(self.conv1(x)))#10X10
+        x = self.pool(pt.nn.functional.relu(self.conv2(x)))#5X5
         #print(x)
         x = x.view(-1, INPUT_SIZE)
         x = pt.nn.functional.relu(self.fc1(x))
@@ -93,15 +93,20 @@ def test(net, test_images, test_labels, wmu_test_images, wmu_test_labels):
     correct = (predicted == test_labels).sum()
     
     print("MNIST")
-    print("\tAccuracy: %f"%(correct/test_labels.shape[0]*100))
+    print("\tAccuracy: %.2f%%" %(correct/test_labels.shape[0]*100))
     
     wmu_test_images = pt.autograd.Variable(wmu_test_images)
     y = net(wmu_test_images)
     _, predicted = pt.max(y.data,1)
+    
+    result = (predicted == wmu_test_labels)
+    idk = pt.cat((wmu_test_labels.int().view(-1,1),predicted.int().view(-1,1),result.int().view(-1,1)),1)
+    print(idk)
+    
     correct = (predicted == wmu_test_labels).sum()
     
     print("WMU")
-    print("\tAccuracy: %f"%(correct/wmu_test_labels.shape[0]*100))
+    print("\tAccuracy: %.2f%%" %(correct/wmu_test_labels.shape[0]*100))
 
 def load_data():
     try:
@@ -170,6 +175,7 @@ def load_data():
 if __name__ == "__main__":
     
     net = Net()
+   
     
     train_images, train_labels, validate_images, validate_labels, test_images, test_labels, wmu_test_images, wmu_test_labels = load_data()
     
@@ -184,15 +190,22 @@ if __name__ == "__main__":
         wmu_test_images = wmu_test_images.cuda()
         wmu_test_labels = wmu_test_labels.cuda()
 
-    train_start = time.time()
-    train(net, train_images, train_labels, validate_images, validate_labels)
-    train_end = time.time()
-    print("Total time to train:", train_end-train_start)
-    
-    net.load_state_dict(pt.load("model_save/model"))
-    if pt.cuda.is_available():
-        net.cuda()
-    
+    load = 1
+    if load:
+        if pt.cuda.is_available():
+            net.load_state_dict(pt.load("model_save/best/model"))
+        else:
+            net.load_state_dict(pt.load("model_save/best/model", map_location=lambda storage, loc: storage))
+    else:
+        train_start = time.time()
+        train(net, train_images, train_labels, validate_images, validate_labels)
+        train_end = time.time()
+        print("Total time to train:", train_end-train_start)
+        if pt.cuda.is_available():
+            net.load_state_dict(pt.load("model_save/model"))
+        else:
+            net.load_state_dict(pt.load("model_save/model", map_location=lambda storage, loc: storage))
+        
     test(net, test_images, test_labels, wmu_test_images, wmu_test_labels)
 
 
